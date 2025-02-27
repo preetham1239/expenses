@@ -1,0 +1,9 @@
+.env
+node_modules/
+**/node_modules/
+**/localhost+1.pem
+**/localhost+1-key.pem
+/uploads
+**/.DS_Store
+**/.idea
+.talismanrc
