@@ -27,14 +27,28 @@ CORS(app, resources={r"/*": {
         "https://localhost:3000",
         "https://127.0.0.1:3000",
         "http://localhost:3000",
-        "http://127.0.0.1:3000"
+        "http://127.0.0.1:3000",
+        "https://cdn.plaid.com"  # Added Plaid CDN
     ],
     "methods": ["GET", "POST", "OPTIONS"],
-    "allow_headers": ["Content-Type"],
-    "supports_credentials": True
+    "allow_headers": ["Content-Type", "Authorization", "X-Requested-With"],
+    "expose_headers": ["Content-Type", "Authorization"],
+    "supports_credentials": True,
+    "max_age": 600
 }})
 
+
 app.config["UPLOAD_FOLDER"] = UPLOAD_FOLDER
+
+
+@app.after_request
+def add_headers(response):
+    # Allow iframe embedding (required for Plaid)
+    response.headers['X-Frame-Options'] = 'ALLOW-FROM https://cdn.plaid.com'
+    response.headers['Content-Security-Policy'] = "frame-ancestors 'self' https://cdn.plaid.com"
+    response.headers['Permissions-Policy'] = "fullscreen=*, payment=*"
+    response.headers['Cross-Origin-Opener-Policy'] = "same-origin-allow-popups"
+    return response
 
 
 @app.before_request

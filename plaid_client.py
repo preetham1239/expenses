@@ -6,6 +6,7 @@ from plaid.configuration import Configuration
 from plaid.api_client import ApiClient
 from config import Config
 from plaid.model.link_token_create_request import LinkTokenCreateRequest
+from plaid.model.link_token_create_request_user import LinkTokenCreateRequestUser
 from plaid.model.transactions_get_request import TransactionsGetRequest
 from plaid.model.transactions_get_request_options import TransactionsGetRequestOptions
 from plaid.model.item_public_token_exchange_request import ItemPublicTokenExchangeRequest
@@ -19,9 +20,17 @@ class PlaidClient:
 
     def __init__(self):
         # Set Plaid API environment
-        self.configuration = Configuration(
-            host="https://production.plaid.com" if Config.PLAID_ENV == "production" else "https://sandbox.plaid.com"
-        )
+        plaid_env = Config.PLAID_ENV.lower()
+        host_map = {
+            "sandbox": "https://sandbox.plaid.com",
+            "development": "https://development.plaid.com",
+            "production": "https://production.plaid.com"
+        }
+
+        host = host_map.get(plaid_env, "https://sandbox.plaid.com")
+        logging.info(f"Initializing Plaid client with environment: {plaid_env}, host: {host}")
+
+        self.configuration = Configuration(host=host)
         self.configuration.api_key["clientId"] = Config.PLAID_CLIENT_ID
         self.configuration.api_key["secret"] = Config.PLAID_SECRET
         self.api_client = ApiClient(self.configuration)
@@ -47,20 +56,39 @@ class PlaidClient:
     def create_link_token(self):
         """Generates a Plaid Link Token for user authentication."""
         try:
-            request = LinkTokenCreateRequest(
-                user={"client_user_id": "unique_user_id"},
-                client_name="My App",
-                products=[Products("transactions")],
-                country_codes=[CountryCode("US")],
-                language="en",
-                # institution
-                # redirect_uri=Config.PLAID_REDIRECT_URI  # Required for OAuth banks
-            )
+            # Create a unique user ID for this session
+            import uuid
+            unique_user_id = str(uuid.uuid4())
+            logging.info(f"Creating link token for user ID: {unique_user_id}")
+
+            # Build the request
+            request_dict = {
+                "user": {"client_user_id": unique_user_id},
+                "client_name": "Expense Tracker",
+                "products": [Products("transactions")],
+                "country_codes": [CountryCode("US")],
+                "language": "en"
+            }
+
+            # Add redirect URI if configured (needed for OAuth flows)
+            if Config.PLAID_REDIRECT_URI:
+                logging.info(f"Using redirect URI: {Config.PLAID_REDIRECT_URI}")
+                request_dict["redirect_uri"] = Config.PLAID_REDIRECT_URI
+
+            # Create the request object
+            request = LinkTokenCreateRequest(**request_dict)
+
+            # Execute the API call
             response = self.client.link_token_create(request)
-            logging.info("🔗 Link Token successfully generated.")
-            return response.to_dict()
+            link_token_data = response.to_dict()
+
+            # Log a portion of the token for debugging (not the full token for security)
+            token_preview = link_token_data.get('link_token', '')[:10] + '...' if link_token_data.get('link_token') else 'None'
+            logging.info(f"🔗 Link Token successfully generated: {token_preview}")
+
+            return link_token_data
         except Exception as e:
-            logging.error(f"❌ Failed to create link token: {str(e)}")
+            logging.error(f"❌ Failed to create link token: {str(e)}", exc_info=True)
             return {"error": f"Failed to create link token: {str(e)}"}
 
     def exchange_public_token(self, public_token):
@@ -68,8 +96,13 @@ class PlaidClient:
         try:
             request = ItemPublicTokenExchangeRequest(public_token=public_token)
             response = self.client.item_public_token_exchange(request)
-            logging.info("✅ Public token successfully exchanged for access token.")
-            return response.to_dict()
+            response_dict = response.to_dict()
+
+            # Log a portion of the access token for debugging (not the full token for security)
+            token_preview = response_dict.get('access_token', '')[:10] + '...' if response_dict.get('access_token') else 'None'
+            logging.info(f"✅ Public token successfully exchanged for access token: {token_preview}")
+
+            return response_dict
         except Exception as e:
             logging.error(f"❌ Failed to exchange public token: {str(e)}")
             return {"error": f"Failed to exchange public token: {str(e)}"}
