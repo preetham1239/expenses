@@ -7,3 +7,5 @@ node_modules/
 **/.DS_Store
 **/.idea
 .talismanrc
+dummy.py
+plan.txt

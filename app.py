@@ -1,17 +1,16 @@
-import os
-import logging
-import ssl
-import traceback
-
 from flask import Flask, jsonify, request
 from plaid_service import PlaidService
 from flask_cors import CORS
 from transaction_loader import TransactionLoader
+import logging
+import ssl
+import os
+import traceback
 
 # 🔹 Configure Logging
 logging.basicConfig(
-    filename="server.log",  # Log file location
-    level=logging.INFO,  # Log level (INFO, DEBUG, ERROR)
+    filename="server.log",
+    level=logging.INFO,
     format="%(asctime)s - %(levelname)s - %(message)s",
 )
 
@@ -22,40 +21,38 @@ loader = TransactionLoader()
 # 🔹 Set Upload Folder for Excel Files
 UPLOAD_FOLDER = os.path.join(os.getcwd(), "uploads")
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+
+# 🔹 Enhanced CORS Configuration for Plaid
 CORS(app, resources={r"/*": {
     "origins": [
         "https://localhost:3000",
         "https://127.0.0.1:3000",
         "http://localhost:3000",
-        "http://127.0.0.1:3000",
-        "https://cdn.plaid.com"  # Added Plaid CDN
+        "http://127.0.0.1:3000"
     ],
     "methods": ["GET", "POST", "OPTIONS"],
     "allow_headers": ["Content-Type", "Authorization", "X-Requested-With"],
-    "expose_headers": ["Content-Type", "Authorization"],
     "supports_credentials": True,
-    "max_age": 600
+    "expose_headers": ["Content-Type", "Authorization"]
 }})
 
 
-app.config["UPLOAD_FOLDER"] = UPLOAD_FOLDER
-
-
+# Add custom headers to every response for Plaid
 @app.after_request
-def add_headers(response):
-    # Allow iframe embedding (required for Plaid)
-    response.headers['X-Frame-Options'] = 'ALLOW-FROM https://cdn.plaid.com'
+def add_plaid_headers(response):
+    # Set headers needed for Plaid Link to work
+    response.headers['Access-Control-Allow-Origin'] = 'https://localhost:3000'
+    response.headers['Access-Control-Allow-Credentials'] = 'true'
+    response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization, X-Requested-With'
+
+    # Allow Plaid's iframe
+    response.headers['Permissions-Policy'] = 'fullscreen=*, payment=*'
+    response.headers['Cross-Origin-Opener-Policy'] = 'same-origin-allow-popups'
+
+    # Set Content-Security-Policy to allow Plaid frames
     response.headers['Content-Security-Policy'] = "frame-ancestors 'self' https://cdn.plaid.com"
-    response.headers['Permissions-Policy'] = "fullscreen=*, payment=*"
-    response.headers['Cross-Origin-Opener-Policy'] = "same-origin-allow-popups"
+
     return response
-
-
-@app.before_request
-def log_request_info():
-    logging.debug(f"Incoming Request: {request.method} {request.url}")
-    logging.debug(f"Headers: {request.headers}")
-    logging.debug(f"Remote Address: {request.remote_addr}")
 
 
 @app.route("/link/token/create", methods=["POST"])
@@ -111,7 +108,6 @@ if __name__ == "__main__":
     # 🔹 Load SSL Certificates for HTTPS
     try:
         context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
-        # context.load_cert_chain("cert.pem", "key.pem")
         context.load_cert_chain("frontend/localhost+1.pem", "frontend/localhost+1-key.pem")
         logging.info("✅ SSL certificates loaded successfully")
     except Exception as e:
@@ -119,6 +115,4 @@ if __name__ == "__main__":
         logging.error(traceback.format_exc())
 
     logging.info("🚀 Starting Flask Server on port 8000")
-    # app.run(host="0.0.0.0", port=8000, debug=True)
     app.run(host="localhost", port=8000, debug=True, ssl_context=context)
-
