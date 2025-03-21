@@ -62,21 +62,17 @@ class PlaidClient:
             logging.info(f"Creating link token for user ID: {unique_user_id}")
 
             # Build the request
-            request_dict = {
-                "user": {"client_user_id": unique_user_id},
-                "client_name": "Expense Tracker",
-                "products": [Products("transactions")],
-                "country_codes": [CountryCode("US")],
-                "language": "en"
-            }
+            user = LinkTokenCreateRequestUser(client_user_id=unique_user_id)
 
-            # Add redirect URI if configured (needed for OAuth flows)
-            if Config.PLAID_REDIRECT_URI:
-                logging.info(f"Using redirect URI: {Config.PLAID_REDIRECT_URI}")
-                request_dict["redirect_uri"] = Config.PLAID_REDIRECT_URI
-
-            # Create the request object
-            request = LinkTokenCreateRequest(**request_dict)
+            # Create the request object with proper models
+            request = LinkTokenCreateRequest(
+                user=user,
+                client_name="Expense Tracker",
+                products=[Products("transactions")],
+                country_codes=[CountryCode("US")],
+                language="en",
+                redirect_uri=Config.PLAID_REDIRECT_URI if hasattr(Config, 'PLAID_REDIRECT_URI') else None
+            )
 
             # Execute the API call
             response = self.client.link_token_create(request)
@@ -96,7 +92,13 @@ class PlaidClient:
         try:
             request = ItemPublicTokenExchangeRequest(public_token=public_token)
             response = self.client.item_public_token_exchange(request)
-            response_dict = response.to_dict()
+
+            # Check if response is already a dict or needs to_dict() method
+            if hasattr(response, 'to_dict'):
+                response_dict = response.to_dict()
+            else:
+                # If response is already a dictionary
+                response_dict = response
 
             # Log a portion of the access token for debugging (not the full token for security)
             token_preview = response_dict.get('access_token', '')[:10] + '...' if response_dict.get('access_token') else 'None'

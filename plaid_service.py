@@ -36,7 +36,7 @@ class PlaidService:
             logging.error(f"❌ Failed to exchange public token: {str(e)}")
             return {"error": f"Failed to exchange public token: {str(e)}"}
 
-    def get_chase_transactions(self, access_token, start_date="2024-01-01", end_date="2024-02-01"):
+    def get_transactions(self, access_token, start_date="2024-01-01", end_date="2024-02-01"):
         """Retrieves transactions from Plaid API."""
         if not access_token:
             logging.warning("❌ Access token is missing.")
