@@ -19,9 +19,12 @@ const PlaidConnect = ({ setAccessToken, hasValidToken }) => {
     };
 
     useEffect(() => {
-        // Only fetch a link token if we don't already have a valid token
-        if ((!hasValidToken || showNewConnection) && !linkToken && !successMessage) {
-            fetchLinkToken();
+        // Only fetch a link token if we don't have a valid token
+        // OR if the user explicitly wants to connect a new account
+        if (!hasValidToken || showNewConnection) {
+            if (!linkToken && !successMessage) {
+                fetchLinkToken();
+            }
         }
     }, [hasValidToken, linkToken, successMessage, showNewConnection]);
 
@@ -29,7 +32,9 @@ const PlaidConnect = ({ setAccessToken, hasValidToken }) => {
         setIsLoading(true);
         try {
             console.log("Fetching link token...");
-            const response = await axios.post("https://localhost:8000/link/token/create", {}, {
+            const response = await axios.post("https://localhost:8000/link/token/create", {
+                force_new_token: showNewConnection // Pass this flag to indicate if we're explicitly requesting a new token
+            }, {
                 headers: {
                     "Content-Type": "application/json"
                 },
@@ -37,6 +42,13 @@ const PlaidConnect = ({ setAccessToken, hasValidToken }) => {
             });
 
             console.log("Link token response:", response.data);
+
+            // Handle the case where the server tells us we're using an existing token
+            if (response.data.existing_token) {
+                setSuccessMessage("Using existing bank connection");
+                setError(null);
+                return;
+            }
 
             if (response.data.link_token) {
                 setLinkToken(response.data.link_token);

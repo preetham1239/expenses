@@ -65,9 +65,9 @@ class PlaidService:
         if not access_token:
             # If not provided, try to get from database
             if self.db is not None:
-                account_doc = self.db.accounts.find_one({"_id": 1})
-                if account_doc and "access_token" in account_doc:
-                    access_token = account_doc["access_token"]
+                account_doc = self.db.accounts.find_one({"id": 1})
+                if account_doc and "token_id" in account_doc:
+                    access_token = account_doc["token_id"]
                     logging.info("✅ Retrieved access token from database.")
 
         if not access_token:

@@ -52,26 +52,89 @@ class PlaidClient:
             # Return today's date as fallback
             return datetime.now().date()
 
-    def get_transactions(self, access_token, start_date="2024-01-01", end_date="2024-02-01"):
-        """Fetches transactions from Plaid API securely."""
+    def get_transactions(self, access_token, start_date=None, end_date=None, limit=500):
+        """Fetches transactions from Plaid API securely with pagination.
+
+        Args:
+            access_token (str): Plaid access token
+            start_date (str): Start date in YYYY-MM-DD format
+            end_date (str): End date in YYYY-MM-DD format
+            limit (int): Maximum number of transactions to retrieve (default 500)
+
+        Returns:
+            list: List of transaction objects
+        """
         try:
+            # Ensure we're using the provided dates
+            if not start_date:
+                start_date = (datetime.now() - timedelta(days=30)).strftime('%Y-%m-%d')
+                logging.info(f"No start_date provided, using default: {start_date}")
+            else:
+                logging.info(f"Using provided start_date: {start_date}")
+
+            if not end_date:
+                end_date = datetime.now().strftime('%Y-%m-%d')
+                logging.info(f"No end_date provided, using default: {end_date}")
+            else:
+                logging.info(f"Using provided end_date: {end_date}")
+
             # Convert date strings to actual date objects
             start_date_obj = self._parse_date(start_date)
             end_date_obj = self._parse_date(end_date)
 
-            request = TransactionsGetRequest(
-                access_token=access_token,
-                start_date=start_date_obj,
-                end_date=end_date_obj,
-                options=TransactionsGetRequestOptions(count=100)
-            )
+            logging.info(f"Making Plaid API request with date range: {start_date_obj} to {end_date_obj}, limit: {limit}")
 
-            logging.info(f"Requesting transactions from {start_date_obj} to {end_date_obj}")
+            # Initialize variables for pagination
+            all_transactions = []
+            has_more = True
+            cursor = None
 
-            response = self.client.transactions_get(request)
-            transactions = response.to_dict()["transactions"]
-            logging.info(f"🔄 Retrieved {len(transactions)} transactions.")
-            return transactions
+            # Use pagination to get all transactions
+            while has_more:
+                # Prepare options with cursor if we have one
+                options = TransactionsGetRequestOptions(
+                    count=100  # Maximum per request
+                )
+
+                if cursor:
+                    options.cursor = cursor
+
+                # Make the request
+                request = TransactionsGetRequest(
+                    access_token=access_token,
+                    start_date=start_date_obj,
+                    end_date=end_date_obj,
+                    options=options
+                )
+
+                response = self.client.transactions_get(request)
+                response_dict = response.to_dict()
+
+                # Get transactions from this batch
+                batch_transactions = response_dict["transactions"]
+                all_transactions.extend(batch_transactions)
+
+                # Check if there are more transactions to fetch
+                has_more = response_dict.get("has_more", False)
+
+                # Get cursor for next page if there is one
+                if has_more:
+                    cursor = response_dict.get("next_cursor")
+                    logging.info(f"Retrieved {len(batch_transactions)} transactions, fetching more with cursor")
+
+                # Check if we've reached the requested limit
+                if limit and len(all_transactions) >= limit:
+                    all_transactions = all_transactions[:limit]
+                    has_more = False
+                    logging.info(f"Reached limit of {limit} transactions, stopping pagination")
+
+                # Safety check to prevent infinite loops
+                if len(all_transactions) > 10000:
+                    logging.warning("Retrieved over 10,000 transactions, stopping to prevent excessive API calls")
+                    has_more = False
+
+            logging.info(f"🔄 Retrieved {len(all_transactions)} transactions from {start_date_obj} to {end_date_obj}")
+            return all_transactions
         except Exception as e:
             logging.error(f"❌ Failed to fetch transactions: {str(e)}")
             return {"error": f"Failed to fetch transactions: {str(e)}"}
