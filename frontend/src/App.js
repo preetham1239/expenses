@@ -1,18 +1,65 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import PlaidConnect from "./components/PlaidConnect";
 import Transactions from "./components/Transactions";
 import FileUpload from "./components/FileUpload";
 import AnalysisDashboard from "./components/AnalysisDashboard";
+import axios from "axios";
 import './App.css';
 
 function App() {
     const [accessToken, setAccessToken] = useState(null);
     const [activeTab, setActiveTab] = useState("connect");
+    const [initialized, setInitialized] = useState(false);
+    const [hasValidToken, setHasValidToken] = useState(false);
+
+    // Check for existing token when app loads
+    useEffect(() => {
+        const checkExistingToken = async () => {
+            try {
+                // Call new endpoint to check if a valid token exists
+                const response = await axios.get("https://localhost:8000/validate-token", {
+                    withCredentials: true
+                });
+
+                if (response.data.valid) {
+                    // If we have a valid token, set the state
+                    setHasValidToken(true);
+                    // Optionally set the active tab to Transactions directly
+                    setActiveTab("transactions");
+                }
+            } catch (err) {
+                console.log("No existing token found or token is invalid");
+            } finally {
+                setInitialized(true);
+            }
+        };
+
+        checkExistingToken();
+    }, []);
 
     const handleUploadSuccess = () => {
         // Auto-switch to analysis tab after successful upload
         setActiveTab("analysis");
     };
+
+    // Watch for accessToken changes and navigate to transactions tab when it's set
+    useEffect(() => {
+        if (accessToken) {
+            // When accessToken is set, automatically switch to transactions tab
+            setActiveTab("transactions");
+        }
+    }, [accessToken]);
+
+    // Show loading until initialization completes
+    if (!initialized) {
+        return (
+            <div className="App" style={{ display: "flex", justifyContent: "center", alignItems: "center", height: "100vh" }}>
+                <div style={{ textAlign: "center" }}>
+                    <p>Loading application...</p>
+                </div>
+            </div>
+        );
+    }
 
     return (
         <div className="App">
@@ -70,10 +117,8 @@ function App() {
                         color: activeTab === "transactions" ? "white" : "black",
                         border: "1px solid #ddd",
                         borderRadius: "4px",
-                        cursor: "pointer",
-                        opacity: accessToken ? 1 : 0.5
+                        cursor: "pointer"
                     }}
-                    disabled={!accessToken}
                 >
                     Transactions
                 </button>
@@ -97,7 +142,7 @@ function App() {
             <main style={{ padding: "20px" }}>
                 {activeTab === "connect" && (
                     <div>
-                        <PlaidConnect setAccessToken={setAccessToken} />
+                        <PlaidConnect setAccessToken={setAccessToken} hasValidToken={hasValidToken} />
                     </div>
                 )}
 
@@ -109,28 +154,7 @@ function App() {
 
                 {activeTab === "transactions" && (
                     <div>
-                        {accessToken ? (
-                            <Transactions accessToken={accessToken} />
-                        ) : (
-                            <div style={{ textAlign: "center", padding: "50px" }}>
-                                <h2>Bank Connection Required</h2>
-                                <p>Please connect your bank account first to view transactions.</p>
-                                <button
-                                    onClick={() => setActiveTab("connect")}
-                                    style={{
-                                        padding: "10px 15px",
-                                        backgroundColor: "#2196F3",
-                                        color: "white",
-                                        border: "none",
-                                        borderRadius: "4px",
-                                        cursor: "pointer",
-                                        marginTop: "15px"
-                                    }}
-                                >
-                                    Go to Bank Connection
-                                </button>
-                            </div>
-                        )}
+                        <Transactions accessToken={accessToken} />
                     </div>
                 )}
 

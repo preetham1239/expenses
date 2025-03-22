@@ -1,5 +1,6 @@
 import logging
 from plaid_client import PlaidClient
+from mongodb_client import get_database
 
 # Configure logging instead of print statements
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
@@ -10,6 +11,7 @@ class PlaidService:
 
     def __init__(self):
         self.client = PlaidClient()
+        self.db = get_database()
 
     def link_chase_account(self):
         """Generates a Link Token for Plaid authentication in production."""
@@ -30,23 +32,52 @@ class PlaidService:
         try:
             response = self.client.exchange_public_token(public_token)
             access_token = response["access_token"]
+
+            # Store the access token in the database
+            if self.db:
+                self.db.accounts.update_one(
+                    {"_id": 1},
+                    {"$set": {"access_token": access_token}},
+                    upsert=True
+                )
+                logging.info("✅ Access Token stored in database.")
+
             logging.info("✅ Access Token retrieved successfully.")
             return {"access_token": access_token}
         except Exception as e:
             logging.error(f"❌ Failed to exchange public token: {str(e)}")
             return {"error": f"Failed to exchange public token: {str(e)}"}
 
-    def get_transactions(self, access_token, start_date="2024-01-01", end_date="2024-02-01"):
-        """Retrieves transactions from Plaid API."""
+    def get_transactions(self, access_token=None, start_date=None, end_date=None):
+        """Retrieves transactions from Plaid API or uses stored token."""
+        # Default dates if not provided
+        from datetime import datetime, timedelta
+
+        # If no start_date provided, use 30 days ago
+        if not start_date:
+            start_date = (datetime.now() - timedelta(days=30)).strftime('%Y-%m-%d')
+
+        # If no end_date provided, use today
+        if not end_date:
+            end_date = datetime.now().strftime('%Y-%m-%d')
+
+        # First, try to get access token from parameter
         if not access_token:
-            logging.warning("❌ Access token is missing.")
-            return {"error": "access_token is required"}
+            # If not provided, try to get from database
+            if self.db is not None:
+                account_doc = self.db.accounts.find_one({"_id": 1})
+                if account_doc and "access_token" in account_doc:
+                    access_token = account_doc["access_token"]
+                    logging.info("✅ Retrieved access token from database.")
+
+        if not access_token:
+            logging.warning("❌ Access token is missing and not found in database.")
+            return {"error": "access_token is required and not found in database"}
 
         try:
-            transactions_response = self.client.get_transactions(access_token, start_date, end_date)
-            transactions = transactions_response.get("transactions", [])
+            transactions = self.client.get_transactions(access_token, start_date, end_date)
             logging.info(f"🔄 Retrieved {len(transactions)} transactions.")
-            return {"transactions": transactions}
+            return transactions
         except Exception as e:
             logging.error(f"❌ Failed to fetch transactions: {str(e)}")
             return {"error": f"Failed to fetch transactions: {str(e)}"}
@@ -59,8 +90,24 @@ class PlaidService:
 
         try:
             response = self.client.exchange_public_token(public_token)
+
+            # Store the access token in the database
+            if hasattr(response, 'to_dict'):
+                response_dict = response.to_dict()
+            else:
+                response_dict = response
+
+            if self.db and "access_token" in response_dict:
+                self.db.accounts.update_one(
+                    {"_id": 1},
+                    {"$set": {"access_token": response_dict["access_token"]}},
+                    upsert=True
+                )
+                logging.info("✅ Access Token stored in database.")
+
             logging.info("✅ Public token successfully exchanged for access token.")
-            return response.to_dict()
+            return response_dict
         except Exception as e:
             logging.error(f"❌ Failed to exchange public token: {str(e)}")
             return {"error": f"Failed to exchange public token: {str(e)}"}
+

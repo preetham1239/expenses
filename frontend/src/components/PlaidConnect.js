@@ -2,10 +2,12 @@ import React, { useState, useEffect } from "react";
 import { usePlaidLink } from "react-plaid-link";
 import axios from "axios";
 
-const PlaidConnect = ({ setAccessToken }) => {
+const PlaidConnect = ({ setAccessToken, hasValidToken }) => {
     const [linkToken, setLinkToken] = useState(null);
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState(null);
+    const [successMessage, setSuccessMessage] = useState(null);
+    const [showNewConnection, setShowNewConnection] = useState(false);
 
     // This function will open Plaid Link in a new tab/window
     const openPlaidInNewTab = (token) => {
@@ -17,42 +19,60 @@ const PlaidConnect = ({ setAccessToken }) => {
     };
 
     useEffect(() => {
-        const fetchLinkToken = async () => {
-            setIsLoading(true);
-            try {
-                console.log("Fetching link token...");
-                const response = await axios.post("https://localhost:8000/link/token/create", {}, {
-                    headers: {
-                        "Content-Type": "application/json"
-                    },
-                    withCredentials: true
-                });
+        // Only fetch a link token if we don't already have a valid token
+        if ((!hasValidToken || showNewConnection) && !linkToken && !successMessage) {
+            fetchLinkToken();
+        }
+    }, [hasValidToken, linkToken, successMessage, showNewConnection]);
 
-                console.log("Link token response:", response.data);
+    const fetchLinkToken = async () => {
+        setIsLoading(true);
+        try {
+            console.log("Fetching link token...");
+            const response = await axios.post("https://localhost:8000/link/token/create", {}, {
+                headers: {
+                    "Content-Type": "application/json"
+                },
+                withCredentials: true
+            });
 
-                if (response.data.link_token) {
-                    setLinkToken(response.data.link_token);
-                    setError(null);
-                } else {
-                    console.error("No link token received:", response.data);
-                    setError("Failed to initialize bank connection.");
-                }
-            } catch (err) {
-                console.error("Error fetching link token:", err);
-                setError("Failed to connect to server. Please try again.");
-            } finally {
-                setIsLoading(false);
+            console.log("Link token response:", response.data);
+
+            if (response.data.link_token) {
+                setLinkToken(response.data.link_token);
+                setError(null);
+            } else {
+                console.error("No link token received:", response.data);
+                setError("Failed to initialize bank connection.");
             }
-        };
-
-        fetchLinkToken();
-    }, []);
+        } catch (err) {
+            console.error("Error fetching link token:", err);
+            setError("Failed to connect to server. Please try again.");
+        } finally {
+            setIsLoading(false);
+        }
+    };
 
     // For checking connection status after linking in new tab
     const checkConnectionStatus = async () => {
-        // In a real app, you'd poll your backend to check if a connection was made
-        // For this demo, we'll just show a message
-        alert('In a real app, this would check if your bank connection was successful.');
+        setIsLoading(true);
+        try {
+            const response = await axios.get("https://localhost:8000/validate-token", {
+                withCredentials: true
+            });
+
+            if (response.data.valid) {
+                setSuccessMessage("Bank connection validated successfully!");
+                // Inform parent component
+                setAccessToken("token-exists-in-db");
+            } else {
+                setError("Connection not found. Please try connecting again.");
+            }
+        } catch (err) {
+            setError("Failed to verify connection. Please try again.");
+        } finally {
+            setIsLoading(false);
+        }
     };
 
     // Normal Plaid Link config
@@ -60,6 +80,7 @@ const PlaidConnect = ({ setAccessToken }) => {
         token: linkToken,
         onSuccess: async (public_token, metadata) => {
             console.log("✅ Plaid Link Success - Public Token:", public_token);
+            setIsLoading(true);
             try {
                 const response = await axios.post("https://localhost:8000/item/public_token/exchange", {
                     public_token,
@@ -72,10 +93,16 @@ const PlaidConnect = ({ setAccessToken }) => {
 
                 if (response.data.access_token) {
                     setAccessToken(response.data.access_token);
+                    // Show success message
+                    setSuccessMessage("Bank connected successfully! You can now view your transactions.");
+                    // Clear any previous errors
+                    setError(null);
                 }
             } catch (err) {
                 console.error("Error exchanging token:", err);
                 setError("Failed to connect bank. Try again.");
+            } finally {
+                setIsLoading(false);
             }
         },
         onExit: (err, metadata) => {
@@ -84,6 +111,51 @@ const PlaidConnect = ({ setAccessToken }) => {
     };
 
     const { open, ready } = usePlaidLink(config);
+
+    if (hasValidToken && !showNewConnection) {
+        return (
+            <div className="plaid-connect-container" style={{ margin: "20px" }}>
+                <h2>Bank Connection Status</h2>
+                <div style={{ color: 'green', marginBottom: '15px', padding: '10px', backgroundColor: '#eeffee', borderRadius: '4px' }}>
+                    <p><strong>Your bank account is already connected!</strong></p>
+                    <p>You can proceed to the Transactions or Analysis tabs to view your financial data.</p>
+                    <button
+                        onClick={() => window.location.href = "#transactions"}
+                        style={{
+                            padding: '8px 12px',
+                            backgroundColor: '#4CAF50',
+                            color: 'white',
+                            border: 'none',
+                            borderRadius: '4px',
+                            cursor: 'pointer',
+                            marginTop: '10px',
+                            marginRight: '10px'
+                        }}
+                    >
+                        Go to Transactions
+                    </button>
+                    <button
+                        onClick={() => {
+                            setLinkToken(null);
+                            setSuccessMessage(null);
+                            setShowNewConnection(true);
+                        }}
+                        style={{
+                            padding: '8px 12px',
+                            backgroundColor: '#FFC107',
+                            color: 'black',
+                            border: 'none',
+                            borderRadius: '4px',
+                            cursor: 'pointer',
+                            marginTop: '10px'
+                        }}
+                    >
+                        Connect New Account
+                    </button>
+                </div>
+            </div>
+        );
+    }
 
     return (
         <div className="plaid-connect-container" style={{ margin: "20px" }}>
@@ -95,18 +167,39 @@ const PlaidConnect = ({ setAccessToken }) => {
                 </div>
             )}
 
+            {successMessage && (
+                <div style={{ color: 'green', marginBottom: '15px', padding: '10px', backgroundColor: '#eeffee', borderRadius: '4px' }}>
+                    <p><strong>Success!</strong> {successMessage}</p>
+                    <p>Now you can go to the Transactions tab to view your data.</p>
+                    <button
+                        onClick={() => window.location.href = "#transactions"}
+                        style={{
+                            padding: '8px 12px',
+                            backgroundColor: '#4CAF50',
+                            color: 'white',
+                            border: 'none',
+                            borderRadius: '4px',
+                            cursor: 'pointer',
+                            marginTop: '10px'
+                        }}
+                    >
+                        Go to Transactions
+                    </button>
+                </div>
+            )}
+
             <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
                 {/* Normal Plaid Link Button */}
                 <button
                     onClick={() => open()}
-                    disabled={!ready || isLoading || !linkToken}
+                    disabled={!ready || isLoading || !linkToken || successMessage}
                     style={{
                         padding: '12px 20px',
-                        backgroundColor: (ready && linkToken) ? '#4CAF50' : '#cccccc',
+                        backgroundColor: (ready && linkToken && !successMessage) ? '#4CAF50' : '#cccccc',
                         color: 'white',
                         border: 'none',
                         borderRadius: '4px',
-                        cursor: (ready && linkToken) ? 'pointer' : 'not-allowed',
+                        cursor: (ready && linkToken && !successMessage) ? 'pointer' : 'not-allowed',
                         fontWeight: 'bold',
                         fontSize: '16px'
                     }}
@@ -117,14 +210,14 @@ const PlaidConnect = ({ setAccessToken }) => {
                 {/* External Plaid Link Button */}
                 <button
                     onClick={() => linkToken && openPlaidInNewTab(linkToken)}
-                    disabled={!linkToken || isLoading}
+                    disabled={!linkToken || isLoading || successMessage}
                     style={{
                         padding: '12px 20px',
-                        backgroundColor: linkToken ? '#2196F3' : '#cccccc',
+                        backgroundColor: (linkToken && !successMessage) ? '#2196F3' : '#cccccc',
                         color: 'white',
                         border: 'none',
                         borderRadius: '4px',
-                        cursor: linkToken ? 'pointer' : 'not-allowed',
+                        cursor: (linkToken && !successMessage) ? 'pointer' : 'not-allowed',
                         fontWeight: 'bold',
                         fontSize: '16px'
                     }}

@@ -10,6 +10,7 @@ from plaid.model.link_token_create_request_user import LinkTokenCreateRequestUse
 from plaid.model.transactions_get_request import TransactionsGetRequest
 from plaid.model.transactions_get_request_options import TransactionsGetRequestOptions
 from plaid.model.item_public_token_exchange_request import ItemPublicTokenExchangeRequest
+from datetime import datetime, date
 
 # Configure logging for production
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
@@ -36,15 +37,37 @@ class PlaidClient:
         self.api_client = ApiClient(self.configuration)
         self.client = plaid_api.PlaidApi(self.api_client)
 
+    def _parse_date(self, date_str):
+        """Converts a date string to a date object required by Plaid API."""
+        if isinstance(date_str, (date, datetime)):
+            # If it's already a date or datetime object, convert to date
+            return date_str.date() if isinstance(date_str, datetime) else date_str
+
+        try:
+            # Try to parse the string into a date object
+            parsed_date = datetime.strptime(date_str, '%Y-%m-%d').date()
+            return parsed_date
+        except Exception as e:
+            logging.error(f"❌ Error parsing date {date_str}: {e}")
+            # Return today's date as fallback
+            return datetime.now().date()
+
     def get_transactions(self, access_token, start_date="2024-01-01", end_date="2024-02-01"):
         """Fetches transactions from Plaid API securely."""
         try:
+            # Convert date strings to actual date objects
+            start_date_obj = self._parse_date(start_date)
+            end_date_obj = self._parse_date(end_date)
+
             request = TransactionsGetRequest(
                 access_token=access_token,
-                start_date=start_date,
-                end_date=end_date,
+                start_date=start_date_obj,
+                end_date=end_date_obj,
                 options=TransactionsGetRequestOptions(count=100)
             )
+
+            logging.info(f"Requesting transactions from {start_date_obj} to {end_date_obj}")
+
             response = self.client.transactions_get(request)
             transactions = response.to_dict()["transactions"]
             logging.info(f"🔄 Retrieved {len(transactions)} transactions.")
@@ -76,7 +99,7 @@ class PlaidClient:
 
             # Execute the API call
             response = self.client.link_token_create(request)
-            link_token_data = response.to_dict()
+            link_token_data = response
 
             # Log a portion of the token for debugging (not the full token for security)
             token_preview = link_token_data.get('link_token', '')[:10] + '...' if link_token_data.get('link_token') else 'None'
@@ -93,12 +116,7 @@ class PlaidClient:
             request = ItemPublicTokenExchangeRequest(public_token=public_token)
             response = self.client.item_public_token_exchange(request)
 
-            # Check if response is already a dict or needs to_dict() method
-            if hasattr(response, 'to_dict'):
-                response_dict = response.to_dict()
-            else:
-                # If response is already a dictionary
-                response_dict = response
+            response_dict = response
 
             # Log a portion of the access token for debugging (not the full token for security)
             token_preview = response_dict.get('access_token', '')[:10] + '...' if response_dict.get('access_token') else 'None'
@@ -108,3 +126,4 @@ class PlaidClient:
         except Exception as e:
             logging.error(f"❌ Failed to exchange public token: {str(e)}")
             return {"error": f"Failed to exchange public token: {str(e)}"}
+

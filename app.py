@@ -1,13 +1,15 @@
-from flask import Flask, jsonify, request, send_from_directory
+from flask import Flask, jsonify, request
 from plaid_service import PlaidService
 from flask_cors import CORS
 from transaction_loader import TransactionLoader
 from transaction_analyzer import TransactionAnalyzer
+from mongodb_client import get_database
 import logging
 import ssl
 import os
 import traceback
 import uuid
+import plaid
 from werkzeug.utils import secure_filename
 
 
@@ -17,7 +19,6 @@ logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - %(levelname)s - %(message)s",
 )
-
 
 app = Flask(__name__)
 service = PlaidService()
@@ -30,7 +31,6 @@ os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max file size
 ALLOWED_EXTENSIONS = {'xlsx', 'xls', 'csv'}
-
 
 # 🔹 Enhanced CORS Configuration for Plaid
 CORS(app, resources={r"/*": {
@@ -78,7 +78,7 @@ def create_link_token():
         logging.info("🔹 Request received: /link/token/create")
         link_token_response = service.link_chase_account()
         logging.info(f"✅ Link Token Created: {link_token_response}")
-        return jsonify(link_token_response)
+        return jsonify(link_token_response.to_dict())
     except Exception as e:
         logging.error(f"❌ Error generating link token: {str(e)}", exc_info=True)
         return jsonify({"error": f"Failed to generate link token: {str(e)}"}), 500
@@ -102,17 +102,134 @@ def exchange_public_token():
         return jsonify({"error": f"Failed to exchange public token: {str(e)}"}), 500
 
 
+@app.route("/validate-token", methods=["GET"])
+def validate_token():
+    """Validates if a stored token exists and is valid."""
+    try:
+        logging.info("🔹 Request received: /validate-token")
+
+        # Check database for token
+        db = get_database()
+        if not db:
+            logging.warning("⚠️ Database connection not available")
+            return jsonify({"valid": False, "message": "Database connection not available"}), 500
+
+        # Try to find the account document
+        account_doc = db.accounts.find_one({"_id": 1})
+
+        if not account_doc or "access_token" not in account_doc:
+            logging.info("ℹ️ No access token found in database")
+            return jsonify({"valid": False, "message": "No access token found"})
+
+        # We have a token - let's verify it works by trying to get account info
+        access_token = account_doc["access_token"]
+
+        # Use Plaid client to verify token by fetching minimal data
+        try:
+            # You can replace this with a lighter API call if available
+            from datetime import datetime, timedelta
+            # Get the last 1 day of transactions to verify token
+            start_date = (datetime.now() - timedelta(days=1)).date()
+            end_date = datetime.now().date()
+
+            # Use the client directly to avoid circular imports
+            from plaid_client import PlaidClient
+            client = PlaidClient()
+
+            # Try to get a small amount of data to verify the token works
+            response = client.client.transactions_get(
+                plaid.model.transactions_get_request.TransactionsGetRequest(
+                    access_token=access_token,
+                    start_date=start_date,
+                    end_date=end_date,
+                    options=plaid.model.transactions_get_request_options.TransactionsGetRequestOptions(
+                        count=1
+                    )
+                )
+            )
+
+            # If we get here, the token is valid
+            logging.info("✅ Access token is valid")
+            return jsonify({"valid": True, "message": "Token is valid"})
+
+        except Exception as e:
+            logging.error(f"❌ Error validating token: {str(e)}")
+            # Token might be expired or invalid
+            return jsonify({"valid": False, "message": "Token validation failed"})
+
+    except Exception as e:
+        logging.error(f"❌ Error in token validation: {str(e)}")
+        return jsonify({"valid": False, "message": f"Error validating token: {str(e)}"}), 500
+
+
 @app.route("/transactions/get", methods=["POST"])
 def get_transactions():
     """Step 4: Fetch transactions using `access_token`."""
     try:
         logging.info("🔹 Request received: /transactions/get")
-        access_token = request.json.get("access_token")
-        if not access_token:
-            logging.warning("⚠️ Missing access_token in request")
-            return jsonify({"error": "access_token is required"}), 400
+        # Get date parameters if they exist
+        start_date = request.json.get("start_date")
+        end_date = request.json.get("end_date")
 
-        transactions = service.get_transactions(access_token)
+        # If no access token provided, try to get from database
+        db = get_database()  # Import from mongodb_client
+        # if db is not None:
+        #     account_doc = db.accounts.find_one({"id": 1})
+        #     print(100, account_doc, db)
+        #     print(db["accounts"].count_documents({}))
+        #     if account_doc and "token_id" in account_doc:
+        #         access_token = account_doc["token_id"]
+        #         logging.info("✅ Retrieved access token from database")
+        #
+        #     # If still no access token, return error
+        #     if not account_doc:
+        #         logging.warning("⚠️ Missing access_token in request and not found in database")
+        #         return jsonify({"error": "access_token is required and not found in database"}), 400
+
+        if db is not None:
+            # First try to find any document in the accounts collection
+            all_docs = list(db.accounts.find())
+            print("All documents in accounts collection:", all_docs)
+
+            # Try to find specifically with id=1
+            account_doc = db.accounts.find_one({"id": 1})
+            print("Document with id=1:", account_doc)
+
+            # Also try without any filter to see what's there
+            first_doc = db.accounts.find_one()
+            print("First document in collection:", first_doc)
+
+            # Count documents
+            count = db.accounts.count_documents({})
+            print("Total documents:", count)
+
+            # If we found any document, use it even if it doesn't have id=1
+            if not account_doc and first_doc:
+                account_doc = first_doc
+                print("Using first document instead")
+
+            # Check for either token_id or access_token
+            if account_doc:
+                if "token_id" in account_doc:
+                    access_token = account_doc["token_id"]
+                    print("Found token_id:", access_token[:5] + "..." if access_token else "None")
+                elif "access_token" in account_doc:
+                    access_token = account_doc["access_token"]
+                    print("Found access_token:", access_token[:5] + "..." if access_token else "None")
+
+
+        # Call with provided dates or let service use defaults
+        if start_date and end_date:
+            transactions = service.get_transactions(access_token, start_date, end_date)
+        else:
+            transactions = service.get_transactions(access_token)
+        print(transactions[0])
+
+        # Check if we got an error back
+        if isinstance(transactions, dict) and "error" in transactions:
+            logging.warning(f"⚠️ Error from Plaid service: {transactions['error']}")
+            return jsonify({"error": transactions["error"]}), 400
+
         logging.info(f"✅ Transactions Retrieved: {len(transactions)} transactions")
         return jsonify({"transactions": transactions})
     except Exception as e:
