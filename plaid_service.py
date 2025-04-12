@@ -49,45 +49,11 @@ class PlaidService:
             logging.error(f"❌ Failed to exchange public token: {str(e)}")
             return {"error": f"Failed to exchange public token: {str(e)}"}
 
-    # def get_transactions(self, access_token=None, start_date=None, end_date=None):
-    #     """Retrieves transactions from Plaid API or uses stored token."""
-    #     # Default dates if not provided
-    #     from datetime import datetime, timedelta
-    #
-    #     # If no start_date provided, use 30 days ago
-    #     if not start_date:
-    #         start_date = (datetime.now() - timedelta(days=30)).strftime('%Y-%m-%d')
-    #
-    #     # If no end_date provided, use today
-    #     if not end_date:
-    #         end_date = datetime.now().strftime('%Y-%m-%d')
-    #
-    #     # First, try to get access token from parameter
-    #     if not access_token:
-    #         # If not provided, try to get from database
-    #         if self.db is not None:
-    #             account_doc = self.db.accounts.find_one({"id": 1})
-    #             if account_doc and "token_id" in account_doc:
-    #                 access_token = account_doc["token_id"]
-    #                 logging.info("✅ Retrieved access token from database.")
-    #
-    #     if not access_token:
-    #         logging.warning("❌ Access token is missing and not found in database.")
-    #         return {"error": "access_token is required and not found in database"}
-    #
-    #     try:
-    #         transactions = self.client.get_transactions(access_token, start_date, end_date)
-    #         logging.info(f"🔄 Retrieved {len(transactions)} transactions.")
-    #         return transactions
-    #     except Exception as e:
-    #         logging.error(f"❌ Failed to fetch transactions: {str(e)}")
-    #         return {"error": f"Failed to fetch transactions: {str(e)}"}
-
     def get_transactions(self,
                          access_token: str = None,
                          start_date: str = None,
                          end_date: str = None,
-                         limit: int = 100):
+                         limit: int = None):
         """
         Retrieves up to `limit` transactions from the Plaid API (or uses a stored token).
         If start_date/end_date are omitted, defaults to the last 30 days.
@@ -125,8 +91,6 @@ class PlaidService:
             logging.error(f"❌ Failed to fetch transactions: {e}")
             return {"error": str(e)}
 
-
-
     def exchange_public_token(self, public_token):
         """Exchanges a `public_token` for a permanent `access_token`."""
         if not public_token:
@@ -147,4 +111,3 @@ class PlaidService:
         except Exception as e:
             logging.error(f"❌ Failed to exchange public token: {str(e)}")
             return {"error": f"Failed to exchange public token: {str(e)}"}
-

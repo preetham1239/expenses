@@ -82,6 +82,14 @@ def initialize_app():
             logging.error(f"❌ Error loading access token: {str(e)}")
 
 
+def get_last_month_date_range():
+    today = datetime.today()
+    first_day_this_month = datetime(today.year, today.month, 1)
+    last_day_last_month = first_day_this_month - timedelta(days=1)
+    first_day_last_month = datetime(last_day_last_month.year, last_day_last_month.month, 1)
+    return first_day_last_month.strftime('%Y-%m-%d'), last_day_last_month.strftime('%Y-%m-%d')
+
+
 # Helper function to update access token in both global variable and database
 def update_access_token(token):
     global access_token, db
@@ -296,7 +304,10 @@ def get_transactions():
         # Get date parameters
         start_date = request.json.get("start_date")
         end_date = request.json.get("end_date")
-        limit = request.json.get("limit", 500)
+        limit = min(request.json.get("limit", 500), 500)
+
+        if not start_date or not end_date:
+            start_date, end_date = get_last_month_date_range()
 
         # Call Plaid service
         if start_date and end_date:
@@ -310,6 +321,9 @@ def get_transactions():
             return jsonify({"error": transactions["error"]}), 400
 
         logging.info(f"✅ Transactions Retrieved: {len(transactions)} transactions")
+
+        save_result = loader.save_plaid_transactions(transactions)
+        logging.info(f"✅ Saved transactions to database: {save_result}")
         return jsonify({"transactions": transactions})
     except Exception as e:
         logging.error(f"❌ Error fetching transactions: {str(e)}", exc_info=True)

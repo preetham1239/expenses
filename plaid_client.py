@@ -52,7 +52,7 @@ class PlaidClient:
             # Return today's date as fallback
             return datetime.now().date()
 
-    def get_transactions(self, access_token, start_date=None, end_date=None, limit=500):
+    def get_transactions(self, access_token, limit, start_date=None, end_date=None):
         """Fetches transactions from Plaid API securely with pagination.
 
         Args:
@@ -93,7 +93,7 @@ class PlaidClient:
             while has_more:
                 # Prepare options with cursor if we have one
                 options = TransactionsGetRequestOptions(
-                    count=100  # Maximum per request
+                    count=limit  # Maximum per request
                 )
 
                 if cursor:
