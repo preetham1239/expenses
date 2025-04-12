@@ -39,7 +39,7 @@ const Transactions = ({ accessToken }) => {
             let response;
             try {
                 // First try the direct DB endpoint which should return all transactions
-                response = await axios.post("https://localhost:8000/transactions/get-from-db", {
+                response = await axios.post("https://localhost:8000/transactions/get", {
                     start_date: dateRange.startDate,
                     end_date: dateRange.endDate,
                     limit: 2000 // Request a high limit

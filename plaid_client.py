@@ -10,7 +10,7 @@ from plaid.model.link_token_create_request_user import LinkTokenCreateRequestUse
 from plaid.model.transactions_get_request import TransactionsGetRequest
 from plaid.model.transactions_get_request_options import TransactionsGetRequestOptions
 from plaid.model.item_public_token_exchange_request import ItemPublicTokenExchangeRequest
-from datetime import datetime, date
+from datetime import datetime, date, timedelta
 
 # Configure logging for production
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
