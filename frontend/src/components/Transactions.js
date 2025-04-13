@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, {useEffect, useState} from "react";
 import axios from "axios";
 import TransactionDetailPopup from "./TransactionDetailPopup";
 import TransactionEditForm from "./TransactionEditForm";
@@ -66,7 +66,7 @@ const Transactions = ({ accessToken }) => {
 
                 // Debug: examine date range of received transactions
                 if (txns.length > 0) {
-                    const dates = txns.map(t => t.date).sort();
+                    const dates = txns.map(t => t.authorized_date).sort();
                     console.log(`Transaction date range: ${dates[0]} to ${dates[dates.length-1]}`);
                     console.log(`First 5 dates: ${dates.slice(0, 5).join(', ')}`);
                     console.log(`Last 5 dates: ${dates.slice(-5).join(', ')}`);
@@ -81,6 +81,7 @@ const Transactions = ({ accessToken }) => {
                 // Store all transactions
                 setTransactions(txns);
                 setTotalTransactions(txns.length);
+
 
                 // Update the displayed transactions based on current page
                 updateDisplayedTransactions(txns, 1);
@@ -222,8 +223,7 @@ const Transactions = ({ accessToken }) => {
 
     // Format date for display
     const formatDate = (dateString) => {
-        const date = new Date(dateString);
-        return date.toLocaleDateString();
+        return new Date(dateString).getDate();
     };
 
     // Format currency
@@ -447,7 +447,7 @@ const Transactions = ({ accessToken }) => {
                                     }}
                                     onClick={() => handleShowDetails(txn)}
                                 >
-                                    <td style={{ padding: "10px" }}>{formatDate(txn.date)}</td>
+                                    <td style={{ padding: "10px" }}>{formatDate(txn.authorized_date)}</td>
                                     <td style={{ padding: "10px" }}>{txn.name}</td>
                                     <td style={{
                                         padding: "10px",

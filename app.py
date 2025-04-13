@@ -304,7 +304,7 @@ def get_transactions():
         # Get date parameters
         start_date = request.json.get("start_date")
         end_date = request.json.get("end_date")
-        limit = min(request.json.get("limit", 500), 500)
+        limit = min(request.json.get("limit", 1000), 1000)
 
         if not start_date or not end_date:
             start_date, end_date = get_last_month_date_range()
