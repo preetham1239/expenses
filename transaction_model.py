@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, date
 from typing import Dict, Any
 import json
 
@@ -20,40 +20,71 @@ class Transaction:
         data = data or {}
 
         self.transaction_id = data.get('transaction_id')
-        self.account_id = data.get('account_id', '')
-        self.name = data.get('name', '')
+        self.account_id = data.get('account_id')
+        self.name = data.get('name')
         self.merchant_name = data.get('merchant_name')
         self.amount = data.get('amount')
-        self.date = data.get('authorized_date').isoformat()
-        self.category = data.get('category')
+        self.date = data.get('date')
+        self.category = None
         self.currency = data.get('iso_currency_code', 'USD')
-        self.original_data = Transaction.dict_to_json(data.copy())
+
+        # Store a serializable version of the original data (handles nested date/datetime objects)
+        self.original_data = Transaction.make_serializable(data)
+
+    @staticmethod
+    def default_serializer(obj):
+        """
+        Custom serializer for non-serializable types.
+        Converts date and datetime objects to their ISO formatted string.
+        """
+        if isinstance(obj, (date, datetime)):
+            return obj.isoformat()
+        raise TypeError(f"Type {type(obj)} not serializable")
+
+    @staticmethod
+    def make_serializable(data: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Convert a dictionary to a serializable format using the custom default_serializer.
+        This ensures any date or datetime objects, even nested ones, are converted to strings.
+        """
+        if data is None:
+            return {}
+        json_str = json.dumps(data, default=Transaction.default_serializer)
+        return json.loads(json_str)
 
     def to_dict(self) -> Dict[str, Any]:
-        """Convert Transaction to a dictionary for database storage."""
+        """
+        Convert Transaction to a dictionary for database storage.
+        Ensures that any date/datetime in the 'date' field is converted to a string.
+        """
+        date_value = (
+            self.date.isoformat() if isinstance(self.date, (date, datetime)) else self.date
+        )
         return {
             "transaction_id": self.transaction_id,
             "account_id": self.account_id,
             "name": self.name,
             "merchant": self.merchant_name,
             "amount": self.amount,
-            "date": self.date,
+            "date": date_value,
             "category": self.category,
             "iso_currency_code": self.currency,
             "original_data": self.original_data,
-            "last_updated": datetime.now().isoformat()
+            "last_updated": datetime.now().strftime("%Y-%m-%d")
         }
 
     def to_json(self) -> str:
-        """Convert this Transaction instance to a JSON string."""
-        # Convert instance to dict first, then to JSON
-        return json.dumps(self.to_dict())
-
-    @staticmethod
-    def dict_to_json(data: Dict[str, Any]) -> str:
-        """Convert a dictionary to a JSON string."""
-        return json.dumps(data)
+        """
+        Convert this Transaction instance to a JSON string.
+        The default_serializer is used here as well to catch any non-serializable types.
+        """
+        return json.dumps(self.to_dict(), default=Transaction.default_serializer)
 
     def __repr__(self) -> str:
-        """String representation of the Transaction."""
-        return f"Transaction(id={self.transaction_id}, name={self.name}, amount={self.amount}, date={self.date})"
+        """
+        String representation of the Transaction.
+        """
+        return (
+            f"Transaction(id={self.transaction_id}, name={self.name}, "
+            f"amount={self.amount}, date={self.date})"
+        )

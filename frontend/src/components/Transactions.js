@@ -447,7 +447,7 @@ const Transactions = ({ accessToken }) => {
                                     }}
                                     onClick={() => handleShowDetails(txn)}
                                 >
-                                    <td style={{ padding: "10px" }}>{formatDate(txn.authorized_date)}</td>
+                                    <td style={{ padding: "10px" }}>{txn.date}</td>
                                     <td style={{ padding: "10px" }}>{txn.name}</td>
                                     <td style={{
                                         padding: "10px",

@@ -19,8 +19,9 @@ from transaction_model import Transaction
 logging.basicConfig(
     filename="server.log",
     level=logging.INFO,
-    format="%(asctime)s - %(levelname)s - %(message)s",
+    format="%(asctime)s - %(levelname)s - %(filename)s:%(lineno)d - %(message)s",
 )
+
 
 # Global variables for database connection and access token
 db = None
@@ -333,6 +334,7 @@ def get_transactions():
         logging.info(f"✅ Transactions Retrieved: {len(transactions)} transactions")
 
         save_result = loader.save_plaid_transactions(transactions)
+        print(transactions[0])
         logging.info(f"✅ Saved transactions to database: {save_result}")
         return jsonify({"transactions": transactions})
     except Exception as e:
