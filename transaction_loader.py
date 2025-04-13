@@ -6,6 +6,7 @@ import logging
 import uuid
 from datetime import datetime
 from mongodb_client import get_database
+from transaction_model import Transaction
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
@@ -157,19 +158,7 @@ class TransactionLoader:
             transactions_to_save = []
             for txn in non_pending_txns:
                 # Create a standardized transaction object
-                raw_json = json.loads(json.dumps(txn, default=str))
-                db_txn = {
-                    "transaction_id": txn.get("transaction_id"),
-                    "account_id": txn.get("account_id"),
-                    "name": txn.get("name"),
-                    "merchant": txn.get("merchant_name", txn.get("name")),
-                    "amount": txn.get("amount"),
-                    "date": txn.get("authorized_date").isoformat(),
-                    "category": None,
-                    "iso_currency_code": txn.get("iso_currency_code"),
-                    "original_json": raw_json
-                }
-                transactions_to_save.append(db_txn)
+                transactions_to_save.append(Transaction(txn))
 
             # Insert into MongoDB using the transaction_id as the unique identifier
             inserted_count = 0
@@ -178,8 +167,8 @@ class TransactionLoader:
             for transaction in transactions_to_save:
                 # Check if the transaction_id exists and update or insert accordingly
                 result = self.transactions_collection.update_one(
-                    {"transaction_id": transaction["transaction_id"]},
-                    {"$set": transaction},
+                    {"transaction_id": transaction.transaction_id},
+                    {"$set": transaction.to_dict()},
                     upsert=True
                 )
 

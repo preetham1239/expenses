@@ -13,6 +13,7 @@ import plaid
 from werkzeug.utils import secure_filename
 from datetime import datetime, timedelta
 
+from transaction_model import Transaction
 
 # 🔹 Configure Logging
 logging.basicConfig(
@@ -311,14 +312,23 @@ def get_transactions():
 
         # Call Plaid service
         if start_date and end_date:
-            transactions = service.get_transactions(token, start_date, end_date, limit)
+            plaid_transactions = service.get_transactions(token, start_date, end_date, limit)
         else:
-            transactions = service.get_transactions(token, limit=limit)
+            plaid_transactions = service.get_transactions(token, limit=limit)
 
         # Check if we got an error back
-        if isinstance(transactions, dict) and "error" in transactions:
-            logging.warning(f"⚠️ Error from Plaid service: {transactions['error']}")
-            return jsonify({"error": transactions["error"]}), 400
+        if isinstance(plaid_transactions, dict) and "error" in plaid_transactions:
+            logging.warning(f"⚠️ Error from Plaid service: {plaid_transactions['error']}")
+            return jsonify({"error": plaid_transactions["error"]}), 400
+
+        transactions = []
+        for plaid_txn in plaid_transactions:
+            try:
+                txn = Transaction(plaid_txn)
+                txn.source = "plaid"
+                transactions.append(txn.to_dict())
+            except Exception as e:
+                logging.error(f"Error converting transaction: {str(e)}")
 
         logging.info(f"✅ Transactions Retrieved: {len(transactions)} transactions")
 
