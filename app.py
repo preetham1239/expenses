@@ -1,3 +1,5 @@
+import json
+
 from flask import Flask, jsonify, request
 from plaid_service import PlaidService
 from flask_cors import CORS
@@ -322,21 +324,11 @@ def get_transactions():
             logging.warning(f"⚠️ Error from Plaid service: {plaid_transactions['error']}")
             return jsonify({"error": plaid_transactions["error"]}), 400
 
-        transactions = []
-        for plaid_txn in plaid_transactions:
-            try:
-                txn = Transaction(plaid_txn)
-                txn.source = "plaid"
-                transactions.append(txn.to_dict())
-            except Exception as e:
-                logging.error(f"Error converting transaction: {str(e)}")
+        logging.info(f"✅ Transactions Retrieved: {len(plaid_transactions)} transactions")
 
-        logging.info(f"✅ Transactions Retrieved: {len(transactions)} transactions")
-
-        save_result = loader.save_plaid_transactions(transactions)
-        print(transactions[0])
+        save_result = loader.save_plaid_transactions(plaid_transactions)
         logging.info(f"✅ Saved transactions to database: {save_result}")
-        return jsonify({"transactions": transactions})
+        return jsonify({"transactions": plaid_transactions})
     except Exception as e:
         logging.error(f"❌ Error fetching transactions: {str(e)}", exc_info=True)
         return jsonify({"error": f"Failed to fetch transactions: {str(e)}"}), 500

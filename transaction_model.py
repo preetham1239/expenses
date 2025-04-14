@@ -24,10 +24,9 @@ class Transaction:
         self.name = data.get('name')
         self.merchant_name = data.get('merchant_name')
         self.amount = data.get('amount')
-        self.date = data.get('date')
+        self.date = data.get('authorized_date')
         self.category = None
         self.currency = data.get('iso_currency_code', 'USD')
-
         # Store a serializable version of the original data (handles nested date/datetime objects)
         self.original_data = Transaction.make_serializable(data)
 
