@@ -51,6 +51,55 @@ class Transaction:
         json_str = json.dumps(data, default=Transaction.default_serializer)
         return json.loads(json_str)
 
+    def to_obj(self):
+        """
+        Create a new Transaction object based on the current transaction data.
+        This can be useful for creating a copy or transforming data.
+
+        Returns:
+            Transaction: A new Transaction instance with the same data
+        """
+        # Create a dictionary representation that matches the expected format for Transaction initialization
+        data = {
+            'transaction_id': self.transaction_id,
+            'account_id': self.account_id,
+            'name': self.name,
+            'merchant_name': self.merchant_name,
+            'category': None,
+            'amount': self.amount,
+            'authorized_date': self.date,  # Note this matches the field name used in __init__
+            'iso_currency_code': self.currency
+        }
+
+        # Create a new Transaction object using this data
+        new_txn = Transaction(data)
+        return new_txn
+
+    def clean(self):
+        """
+        Converts from Plaid's transaction format to our standardized transaction dictionary format.
+        This allows the transaction to be used with other functions that expect our specific format.
+
+        Returns:
+            Dict[str, Any]: Cleaned transaction data in our standardized format
+        """
+        # Create a properly formatted transaction dictionary
+        cleaned_txn = {
+            "transaction_id": self.transaction_id,
+            "account_id": self.account_id,
+            "name": self.name or self.merchant_name or "Unknown Transaction",
+            "merchant": self.merchant_name,
+            "amount": self.amount if self.amount is not None else 0.0,
+            "date": self.date.isoformat() if isinstance(self.date, (date, datetime)) else self.date,
+            "category": None,
+            "currency": self.currency,
+            "original_data": Transaction.make_serializable(selfdata)
+        }
+
+        cleaned_txn["last_updated"] = datetime.now().strftime("%Y-%m-%d")
+
+        return cleaned_txn
+
     def to_dict(self) -> Dict[str, Any]:
         """
         Convert Transaction to a dictionary for database storage.

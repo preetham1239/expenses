@@ -62,11 +62,20 @@ const Transactions = ({ accessToken }) => {
 
             if (response.data.transactions) {
                 const txns = response.data.transactions;
+
+                // iterate through transactions and print the data
+                for (let i = 0; i < txns.length; i++) {
+                    const txn = txns[i];
+                    console.log("Transaction ID: ", txn.id);
+                    console.log("Transaction name: ", txn.name);
+                    console.log("Transaction date: ", txn.date);
+                }
+
                 console.log(`Received ${txns.length} transactions from API`);
 
                 // Debug: examine date range of received transactions
                 if (txns.length > 0) {
-                    const dates = txns.map(t => t.authorized_date).sort();
+                    const dates = txns.map(t => t.date).sort();
                     console.log(`Transaction date range: ${dates[0]} to ${dates[dates.length-1]}`);
                     console.log(`First 5 dates: ${dates.slice(0, 5).join(', ')}`);
                     console.log(`Last 5 dates: ${dates.slice(-5).join(', ')}`);
